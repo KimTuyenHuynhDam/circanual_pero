@@ -80,10 +80,10 @@ for ( species in all_stock) {
     filter(!is.na(Birthday), !is.na(Birthday_Sire), !is.na(Birthday_Dam))
   
   #############
-  # Function to process each sire or dam
+  
   process_parent <- function(data, parent) {
     data %>% 
-      group_by(.data[[parent]]) %>% # Correctly refer to dynamic column names
+      group_by(.data[[parent]]) %>% 
       nest() %>% 
       mutate(data = map(data, ~ .x %>%
                           mutate(one_year_later = min(Birthday) + years(1)) %>%
@@ -94,24 +94,24 @@ for ( species in all_stock) {
   
   
   ##########################
-  # Function to summarize data by birth month over 5-year intervals and write to Excel
+  # Function to summarize data by birth month over 5-year intervals
   
   summarize_by_birthmonth_5_year_interval_to_excel <- function(data, parent_type) {
     birth_year_col <- paste0("BirthYear_", parent_type)
     birth_month_col <- paste0("BirthMonth_", parent_type)
     
-    # Prepare an empty list to store results
+   
     results <- list()
     
     # Calculate intervals based on the range of years in the dataset, divided into 5-year segments
     seq_interval_start <- seq(min(data[[birth_year_col]]), max(data[[birth_year_col]]), by = 5)
     
-    # Determine the maximum year in the dataset for comparison
+    
     max_year <- max(data[[birth_year_col]])
     
-    # Iterate over each interval
+
     for (interval_start in seq_interval_start) {
-      interval_end <- interval_start + 4  # Define the end of the interval
+      interval_end <- interval_start + 4  
       
       # Filter and summarize data within the current interval
       summarized <- data %>%
@@ -119,19 +119,18 @@ for ( species in all_stock) {
         group_by(.data[[birth_month_col]], BirthMonth) %>%
         summarise(total_count = n(), .groups = 'drop') %>%
         pivot_wider(names_from = BirthMonth, values_from = total_count, names_sort = TRUE) %>%
-        #mutate(Year_Period = paste(interval_start, interval_end, sep = "-"))
+        
         mutate(Year_Period = if_else(interval_end > max_year, "Out_of_Range", paste(interval_start, interval_end, sep = "-")))
-      # Append summarized data to the results list
+      
       results[[paste(interval_start, interval_end, sep = "-")]] <- summarized
     }
     
-    # Combine all summarized data frames into one
+    
     final_result <- bind_rows(results)
     
-    # Remove "Out_of_Range" groups before writing to an Excel file
+   
     final_result <- filter(final_result, Year_Period != "Out_of_Range")
-    # Write to an Excel file
-    #write_xlsx(final_result, output_file)
+
   }
   
   
@@ -146,16 +145,16 @@ for ( species in all_stock) {
     completed_data <- lapply(unique(data$Year_Period), function(year_period) {
       period_data <- filter(data, Year_Period == year_period)
       
-      # Use direct column name for renaming if necessary
+    
       period_data <- period_data %>%
         rename(BirthMonth = !!sym(birth_month_col))
       
-      # Ensure all months are present
+    
       period_data_full <- full_join(all_months, period_data, by = "BirthMonth") %>%
         replace_na(list(total_count = 0)) %>%
         mutate(Year_Period = year_period)
       
-      # Optionally, rename the BirthMonth column back to its original dynamic name
+     
       period_data_full <- period_data_full %>%
         rename(!!sym(birth_month_col) := BirthMonth)
       
@@ -164,7 +163,7 @@ for ( species in all_stock) {
     
     completed_data <- bind_rows(completed_data)
     
-    #write_xlsx(completed_data, output_file_path)
+   
   }
   parent = 'Dam'
   
@@ -181,53 +180,41 @@ for ( species in all_stock) {
     
     data = ensure_continuous_birthmonth(summarize_by_birthmonth, parent) 
     data2 = data %>%  select(-ncol(.)) 
+    
     # Transform the data to ratios and multiply by 100, and add the Month column
     data_transformed <- data2 %>%
-      # Calculate the row sums and create a new column for it
       mutate(RowSum = rowSums(select(., -1), na.rm = TRUE)) %>%
-      # Then calculate the ratios for each row
       rowwise() %>%
       mutate(across(-c(1, RowSum), ~ .x / RowSum * 100)) %>%
       ungroup() %>%
-      
-      # Remove the RowSum column as it's no longer needed
       select(-RowSum)
     
     birth_month_col <- paste0("BirthMonth_", parent)
     
     ################
     
-    # Convert to a regular matrix for row-wise operation, excluding the month column
     data_matrix <- as.matrix(data_transformed %>% select(-all_of(birth_month_col)))
     
-    # Apply the condition row-wise
-   # for (i in 1:nrow(data_matrix)) {
-      # Check if any value in the row exceeds 60
-    #  if(any(data_matrix[i, ] > 100, na.rm = TRUE)) {
-        # Replace entire row with NA
-    #    data_matrix[i, ] <- NA
-    #  }
-   # }
+   
     for (i in 1:nrow(data_matrix)) {
-      # Check if the number of NA values in the row exceeds 10
       if(sum(is.na(data_matrix[i, ])) > 9) {
-        # Replace entire row with NA
         data_matrix[i, ] <- NA
       }
     }
     
-    # Convert back to a DataFrame
+
     data_adjusted <- as.data.frame(data_matrix)
-    # Add the month column back
+  
     data_adjusted <- bind_cols(data_transformed %>% select(all_of(birth_month_col)), data_adjusted)  %>%
       mutate(across(everything(), ~replace(., is.nan(.), NA)))
     
-    # Update column names since they were lost in the conversion process
+   
     colnames(data_adjusted)[-1] <- colnames(data_transformed)[-which(names(data_transformed) == birth_month_col)]
     
     data_adjusted2 <- data_adjusted %>% cbind(data %>%  select(ncol(.)) )
     
     write_xlsx(data_adjusted2, paste0('./percentage offspring/',species, '-',parent,'-percentage of offspring by parent birthmonth.xlsx'))
+
     
     # Step 2 and Step 3: Combine Rows Based on Month and Calculate Averages and Standard Deviations
    
@@ -239,34 +226,33 @@ for ( species in all_stock) {
           list(
             mean = ~mean(.x, na.rm = TRUE),
             sd = ~sd(.x, na.rm = TRUE),
-            n = ~sum(!is.na(.x))  # Count non-NA values for each group
+            n = ~sum(!is.na(.x))  
           )
         ),
         .groups = 'drop'
       ) %>%
       ungroup() %>%
+    
       # Calculate SEM for each group based on SD and N
       mutate(across(contains("_sd"), 
                     ~.x / sqrt(get(str_replace(cur_column(), "_sd", "_n"))), 
                     .names = "{.col}_sem"))%>%
-      # Dropping the now unnecessary count columns
       select(-contains("_n"))
     
     
-    # Capture the name of the first column to exclude it from renaming operations
+   
     first_col_name <- names(data_grouped)[1]
     
     data_grouped <- data_grouped %>%
       rename_with(~str_replace_all(.x, "_sd_sem$", "_sem")) %>%
-      # Ensure all columns now start with "X", taking care to not double-prefix already prefixed columns
-      # Skipping the first column for this operation as well
+      
       rename_with(
         ~case_when(
-          .x == first_col_name ~ .x,  # Keep the first column name as is
-          str_starts(.x, "X") ~ .x,  # Keep columns already starting with "X" as is
-          TRUE ~ paste0("X", .x)  # Add "X" prefix to other columns
+          .x == first_col_name ~ .x,  
+          str_starts(.x, "X") ~ .x,  
+          TRUE ~ paste0("X", .x)  
         ),
-        .cols = -all_of(first_col_name)  # Apply to all columns except the first
+        .cols = -all_of(first_col_name)  
       ) 
  
     
@@ -281,9 +267,9 @@ for ( species in all_stock) {
     data_sem = data_grouped %>% select(contains('sem')) %>% t() %>%
       as.data.frame() 
 
-    ###graphs with SEM as error bar
+  
    for (i in 1:12) {
-      # Get the full month name
+
       full_month_name <- month.name[i]
       mean = data_mean[i] 
       colnames(mean) = 'mean'
@@ -292,14 +278,13 @@ for ( species in all_stock) {
       colnames(sem) = 'sem'
       
       data = mean %>% cbind(sem) %>% cbind('BirthMonth'= 1:12)
-      # Calculate the max ylim dynamically based on error bar heights
+ 
       max_y_with_error <- max(data$mean + data$sem, na.rm = TRUE)
       
-      # Set dynamic upper limit for ylim, rounded to the nearest multiple of 5
-  
+ 
       upper_ylim <- ceiling(max(max_y_with_error, 20) / 5) * 5
       
-      # Create the plot with dynamic y values based on the month
+     
       p <- ggplot(data, aes(x = BirthMonth, y = mean)) + 
         geom_point(color = "blue", size = 4) +
         geom_errorbar(color = "blue",
@@ -316,25 +301,24 @@ for ( species in all_stock) {
           y = "% offspring in month"
         ) +
         theme(
-          plot.title = element_text(hjust = 0.5, size = 18),  # Center and increase title font size
-          axis.title = element_text(size = 14),  # Increase axis titles font size
-          axis.line = element_line(linewidth = 1, color = "black"),  # Custom x and y axis lines
+          plot.title = element_text(hjust = 0.5, size = 18), 
+          axis.title = element_text(size = 14),  
+          axis.line = element_line(linewidth = 1, color = "black"),  
           axis.ticks = element_line(color = "black", size = 1),
-          axis.text.x = element_text(margin = margin(t = 5)),  # Add space above x-axis text
-          axis.text.y = element_text(margin = margin(r = 5)),  # Add space to the right of y-axis text
+          axis.text.x = element_text(margin = margin(t = 5)),  
+          axis.text.y = element_text(margin = margin(r = 5)),  
           axis.ticks.length = unit(0.3, "cm"), 
-          axis.text = element_text(size = 14),  # Increase axis text font size
-          panel.grid.major = element_blank(),  # Remove major grid lines
-          panel.grid.minor = element_blank(),  # Remove minor grid lines
-          panel.background = element_rect(fill = "white", colour = NA)  # White background
+          axis.text = element_text(size = 14), 
+          panel.grid.major = element_blank(),  
+          panel.grid.minor = element_blank(), 
+          panel.background = element_rect(fill = "white", colour = NA)  
         ) +
-        scale_x_discrete(limits = month.abb) + # Ensure all months are shown on the x-axis
-        ylim(0, upper_ylim) # Use dynamic ylim rounded to the nearest multiple of 5 
-      
-      # Print the plot
+        scale_x_discrete(limits = month.abb) + s
+        ylim(0, upper_ylim)
+   
       print(p)
       
-      # Save the plot to a file with a dynamic file name based on the month
+    
       ggsave(
         paste0('./graph/SEM/(SEM) ',species, ' - ', parent, ' born in ', i ,' (', full_month_name, ").png"), 
         plot = p, 
@@ -342,10 +326,5 @@ for ( species in all_stock) {
         height = 6
       )
     }
-    
-  
-    
-    
   }
-  
 }
