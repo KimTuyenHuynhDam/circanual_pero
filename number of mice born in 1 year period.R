@@ -19,9 +19,6 @@ matingcage  = read_excel("Mating Records.xlsx")  %>% select(1:5) %>%
 
 all_stock= c("BW", "LL", "PO", "IS", "EP", "SM2")
 
-#all_stock = c("EP")
-#species = c("EP")
-
 
 
 
@@ -60,7 +57,7 @@ for ( species in all_stock) {
   common_cols <- intersect(names(DAMSIRE2), names(IND2))
   common_cols <- setdiff(common_cols, "MatingNumber")
   
-  # Remove duplicate columns from the second data frame (assuming df_pero)
+  # Remove duplicate columns from the second data frame
   DAMSIRE2 <- DAMSIRE2 %>% select(-all_of(common_cols))
   
   
@@ -99,23 +96,22 @@ for ( species in all_stock) {
   
  
   ##########################
-  # Function to summarize data by birth month over 5-year intervals and write to Excel
+  # Function to summarize data by birth month over 5-year intervals 
   
   summarize_by_birthmonth_5_year_interval_to_excel <- function(data, parent_type) {
     birth_year_col <- paste0("BirthYear_", parent_type)
     birth_month_col <- paste0("BirthMonth_", parent_type)
-    
-    # Prepare an empty list to store results
+
     results <- list()
     
-    # Calculate intervals based on the range of years in the dataset, divided into 5-year segments
+   
     seq_interval_start <- seq(min(data[[birth_year_col]]), max(data[[birth_year_col]]), by = 5)
     
-    # Iterate over each interval
+  
     for (interval_start in seq_interval_start) {
       interval_end <- interval_start + 4  # Define the end of the interval
       
-      # Filter and summarize data within the current interval
+    
       summarized <- data %>%
         filter(between(.data[[birth_year_col]], interval_start, interval_end)) %>%
         group_by(.data[[birth_month_col]], BirthMonth) %>%
@@ -123,15 +119,14 @@ for ( species in all_stock) {
         pivot_wider(names_from = BirthMonth, values_from = total_count, names_sort = TRUE) %>%
         mutate(Year_Period = paste(interval_start, interval_end, sep = "-"))
       
-      # Append summarized data to the results list
+    
       results[[paste(interval_start, interval_end, sep = "-")]] <- summarized
     }
     
-    # Combine all summarized data frames into one
+ 
     final_result <- bind_rows(results)
     
-    # Write to an Excel file
-    #write_xlsx(final_result, output_file)
+ 
   }
   
  
@@ -144,16 +139,16 @@ for ( species in all_stock) {
     completed_data <- lapply(unique(data$Year_Period), function(year_period) {
       period_data <- filter(data, Year_Period == year_period)
       
-      # Use direct column name for renaming if necessary
+    
       period_data <- period_data %>%
         rename(BirthMonth = !!sym(birth_month_col))
       
-      # Ensure all months are present
+    
       period_data_full <- full_join(all_months, period_data, by = "BirthMonth") %>%
         replace_na(list(total_count = 0)) %>%
         mutate(Year_Period = year_period)
       
-      # Optionally, rename the BirthMonth column back to its original dynamic name
+    
       period_data_full <- period_data_full %>%
         rename(!!sym(birth_month_col) := BirthMonth)
       
